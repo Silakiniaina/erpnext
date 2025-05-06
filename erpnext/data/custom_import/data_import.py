@@ -25,3 +25,12 @@ class DataImport(ABC):
     def insert_data(self):
         """Insert data into the system"""
         pass
+
+    def check_required_value(self, value, field_name):
+        """
+        Check if required value is present
+        """
+        if not value or value.strip() == "":
+            self.errors.append(f"Line {self.line_number}: {field_name} is required")
+            return False
+        return True
