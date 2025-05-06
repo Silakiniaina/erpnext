@@ -1,128 +1,110 @@
+from erpnext.data.custom_import.data_importer import DataImporter
 import frappe
 from frappe import _
-import csv
-import io
-import openpyxl
-from erpnext.data.custom_import.supplier_import import SupplierImport
+from frappe.utils.file_manager import save_file
+from typing import Dict, List, Optional, Union, Any
+import json
+import base64
+import re
+
+def get_base64_content(dataurl: str) -> bytes:
+    match = re.match(r"data:.*?;base64,(.*)", dataurl)
+    if not match:
+        raise ValueError("Invalid dataurl format")
+    return base64.b64decode(match.group(1))
 
 @frappe.whitelist(allow_guest=False)
-def import_files(file2_id):
-    """
-    Handle the import of the supplier file (file2).
-    If any row has an error, no data is inserted.
-    """
-    try:
-        # Get the supplier file from file ID
-        file_doc = frappe.get_doc("File", file2_id)
-        file_content = file_doc.get_content()
-        file_name = file_doc.file_name
+def import_data(supplier_file: Union[Dict[str, Any], str, None] = None, 
+                rfq_file: Union[Dict[str, Any], str, None] = None, 
+                sq_file: Union[Dict[str, Any], str, None] = None) -> Dict[str, List[str]]:
+    current_user = frappe.get_doc("User", frappe.session.user)
+    data_importer = DataImporter()
+    file_paths = {}
+    error_map = {}
 
-        # Validate that supplier file exists
-        if not file_content:
-            frappe.throw(_("Supplier file (file2) is required"))
-
-        # Process supplier file
-        results = process_supplier_file(file_content, file_name)
-
-        # Check if any errors exist in results
-        has_errors = any(result['status'] == 'error' for result in results)
-
-        if has_errors:
-            frappe.response['message'] = {
-                'status': 'error',
-                'message': 'Import failed due to errors in one or more rows',
-                'results': results
-            }
-        else:
-            # Commit all insertions if no errors
-            for result in results:
-                if result.get('supplier_import'):
-                    supplier_id = result['supplier_import'].insert_data()
-                    result['supplier_id'] = supplier_id
-                    result['status'] = 'success'
-                    result['message'] = f"Supplier {result['supplier_name']} created successfully"
-            frappe.db.commit()
-            frappe.response['message'] = {
-                'status': 'success',
-                'message': 'Supplier file processed successfully',
-                'results': results
-            }
-
-        return frappe.response['message']
-
-    except Exception as e:
-        frappe.db.rollback()
-        frappe.log_error(f"File import error: {str(e)}")
-        frappe.response['message'] = {
-            'status': 'error',
-            'message': f"Error processing files: {str(e)}",
-            'results': []
-        }
-        return frappe.response['message']
-
-def process_supplier_file(file_content, file_name):
-    """
-    Process the supplier file using SupplierImport class, validating all rows first.
-    Uses csv module instead of pandas.
-    """
-    results = []
-    
-    try:
-        # Read file based on extension
-        file_extension = file_name.split('.')[-1].lower()
-
-        if file_extension == 'csv':
-            if isinstance(file_content, bytes):
-                csv_content = io.StringIO(file_content.decode('utf-8'))
-            else:
-                csv_content = io.StringIO(file_content)
-            csv_reader = csv.DictReader(csv_content)
-            rows = list(csv_reader)
-        else:
-            frappe.throw(_("Unsupported file format. Please use CSV or Excel files"))
-
-        # First pass: Validate all rows
-        for index, row in enumerate(rows):
+    def parse_arg(arg):
+        if isinstance(arg, str):
             try:
-                # Initialize SupplierImport with row data
-                supplier_import = SupplierImport(
-                    filename=file_name,
-                    supplier_name=str(row.get('supplier_name', '')),
-                    country=str(row.get('country', '')),
-                    supplier_type=str(row.get('supplier_type', ''))
-                )
-                
-                # Set line number for error reporting
-                supplier_import.line_number = index + 2  # Account for header row
+                return json.loads(arg)
+            except json.JSONDecodeError:
+                return None
+        return arg
 
-                # Validate the data
-                supplier_import.validate()
+    supplier_file = parse_arg(supplier_file)
+    rfq_file = parse_arg(rfq_file)
+    sq_file = parse_arg(sq_file)
 
-                # Store result
-                if supplier_import.valid:
-                    results.append({
-                        'line': supplier_import.line_number,
-                        'status': 'pending',  # Will be updated after insertion
-                        'supplier_name': row.get('supplier_name'),
-                        'supplier_import': supplier_import,  # Store instance for later insertion
-                        'message': 'Validation successful, pending insertion'
-                    })
-                else:
-                    results.append({
-                        'line': supplier_import.line_number,
-                        'status': 'error',
-                        'message': f"Validation failed: {', '.join(supplier_import.errors)}"
-                    })
+    try:
+        frappe.db.begin()
+        if supplier_file:
+            if not isinstance(supplier_file, dict) or 'filename' not in supplier_file or 'dataurl' not in supplier_file:
+                error_map.setdefault('supplier_file', []).append("Invalid supplier file data. Expected a dictionary with 'filename' and 'dataurl' keys.")
+            else:
+                try:
+                    file_content = get_base64_content(supplier_file['dataurl'])
+                    supplier_file_doc = save_file(
+                        fname=supplier_file['filename'],
+                        content=file_content,
+                        dt=None,
+                        dn=None,
+                        decode=False,
+                        is_private=1
+                    )
+                    file_paths['supplier_file'] = supplier_file_doc.file_url
+                except Exception as e:
+                    error_map.setdefault('supplier_file', []).append(f"Error processing supplier file: {str(e)}")
 
+        if rfq_file:
+            if not isinstance(rfq_file, dict) or 'filename' not in rfq_file or 'dataurl' not in rfq_file:
+                error_map.setdefault('rfq_file', []).append("Invalid RFQ file data. Expected a dictionary with 'filename' and 'dataurl' keys.")
+            else:
+                try:
+                    file_content = get_base64_content(rfq_file['dataurl'])
+                    rfq_file_doc = save_file(
+                        fname=rfq_file['filename'],
+                        content=file_content,
+                        dt=None,
+                        dn=None,
+                        decode=False,
+                        is_private=1
+                    )
+                    file_paths['rfq_file'] = rfq_file_doc.file_url
+                except Exception as e:
+                    error_map.setdefault('rfq_file', []).append(f"Error processing RFQ file: {str(e)}")
+
+        if sq_file:
+            if not isinstance(sq_file, dict) or 'filename' not in sq_file or 'dataurl' not in sq_file:
+                error_map.setdefault('sq_file', []).append("Invalid SQ file data. Expected a dictionary with 'filename' and 'dataurl' keys.")
+            else:
+                try:
+                    file_content = get_base64_content(sq_file['dataurl'])
+                    sq_file_doc = save_file(
+                        fname=sq_file['filename'],
+                        content=file_content,
+                        dt=None,
+                        dn=None,
+                        decode=False,
+                        is_private=1
+                    )
+                    file_paths['sq_file'] = sq_file_doc.file_url
+                except Exception as e:
+                    error_map.setdefault('sq_file', []).append(f"Error processing SQ file: {str(e)}")
+
+        if 'supplier_file' in file_paths and not error_map:
+            try:
+                if data_importer.load_supplier_csv(file_paths['supplier_file']):
+                    success, created_suppliers = data_importer.import_supplier()
+                    if data_importer.get_errors().get('supplier_import'):
+                        error_map['supplier_file'] = data_importer.get_errors()['supplier_import']
+                        frappe.log(error_map['supplier_file'])
             except Exception as e:
-                results.append({
-                    'line': index + 2,
-                    'status': 'error',
-                    'message': f"Error processing row: {str(e)}"
-                })
+                error_map.setdefault('supplier_file', []).append(f"Error importing supplier data: {str(e)}")
 
-        print(results)
-
-    except Exception as e:
-        frappe.db.rollback()
-        frappe.throw(_("Error processing supplier file: {0}").format(str(e)))
+    finally:
+        for file_path in file_paths.values():
+            if file_path:
+                try:
+                    frappe.delete_doc("File", file_path, ignore_permissions=True)
+                except Exception as e:
+                    frappe.log_error(f"Error deleting file {file_path}: {str(e)}")
+    return error_map
