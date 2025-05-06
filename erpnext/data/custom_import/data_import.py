@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from frappe import _
 
 class DataImport(ABC):
@@ -47,4 +48,22 @@ class DataImport(ABC):
             return True
         except (ValueError, TypeError):
             self.errors.append(f"Line {self.line_number}: Value '{number}' is not a valid number")
+            return False
+        
+    def validate_date(self, date_str):
+        """
+        Validate if the string is a valid date format
+        """ 
+        try:
+            for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"]:
+                try:
+                    datetime.strptime(date_str, fmt)
+                    return True
+                except ValueError:
+                    continue
+                    
+            self.errors.append(f"Line {self.line_number}: '{date_str}' is not a valid date format")
+            return False
+        except Exception as e:
+            self.errors.append(f"Line {self.line_number}: Error validating date: {str(e)}")
             return False
