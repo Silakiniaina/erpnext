@@ -67,3 +67,11 @@ class DataImport(ABC):
         except Exception as e:
             self.errors.append(f"Line {self.line_number}: Error validating date: {str(e)}")
             return False
+        
+    def validate(self):
+        """
+        Run validation checks on the data
+        """
+        self.check_integrity()
+        self.check_foreign_key()  
+        pass
