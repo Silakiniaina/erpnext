@@ -13,6 +13,9 @@ class SupplierImport(DataImport):
         self.supplier_type = supplier_type
         self.additional_data = {}
 
+# ---------------------------------------------------------------------------- #
+#                                Integrity check                               #
+# ---------------------------------------------------------------------------- #
     def check_type(self):
         """
         Check if supplier type exists in the system
@@ -41,6 +44,9 @@ class SupplierImport(DataImport):
             self.errors.append(f"Line {self.line_number}: Supplier '{self.supplier_name}' already exists")
             is_valid = False
 
+# ---------------------------------------------------------------------------- #
+#                                   Override                                   #
+# ---------------------------------------------------------------------------- #
     def check_integrity(self):
         """
         Check integrity of supplier data
@@ -48,7 +54,30 @@ class SupplierImport(DataImport):
         self.check_required_value(self.supplier_name, "supplier_name")
         self.check_required_value(self.country, "country")
         self.check_required_value(self.supplier_type, "type")
-        
+
         self.check_type()
         self.check_country()
         self.check_supplier()
+
+# ---------------------------------------------------------------------------- #
+#                                Data generation                               #
+# ---------------------------------------------------------------------------- #
+    def generate_additional_data(self):
+        """
+        Generate additional data needed for creating a supplier
+        """
+        # Generate a unique supplier ID if needed
+        supplier_id = f"SUPP-{frappe.utils.now_datetime().strftime('%Y%m%d')}-{frappe.utils.random_string(5)}"
+        
+        # Set default values for other required fields
+        self.additional_data = {
+            "supplier_group": frappe.db.get_single_value("Buying Settings", "supplier_group") or "All Supplier Groups",
+            "supplier_id": supplier_id,
+            "is_internal_supplier": 0,
+            "represents_company": "",
+            "tax_id": "",
+            "default_currency": frappe.db.get_default("Currency"),
+            "default_price_list": "",
+            "payment_terms": "",
+            "doctype": "Supplier"
+        }
