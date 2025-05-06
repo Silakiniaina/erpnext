@@ -68,3 +68,6 @@ class DataImporter:
             return False, created_suppliers
         
         return True, created_suppliers
+
+    def get_errors(self) -> Dict[str, List[str]]:
+        return self.error_map
