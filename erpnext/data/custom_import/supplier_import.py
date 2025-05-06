@@ -59,6 +59,42 @@ class SupplierImport(DataImport):
         self.check_country()
         self.check_supplier()
 
+    def insert_data(self):
+        """
+        Insert supplier data into the system
+        """
+        if not self.valid:
+            return None
+            
+        try:
+            # Generate additional required data
+            self.generate_additional_data()
+            
+            # Create supplier document
+            supplier = frappe.get_doc({
+                "doctype": "Supplier",
+                "supplier_name": self.supplier_name,
+                "country": self.country if self.country else None,
+                "supplier_type": self.supplier_type if self.supplier_type else None,
+                "supplier_group": self.additional_data["supplier_group"],
+                "supplier_id": self.additional_data["supplier_id"],
+                "is_internal_supplier": self.additional_data["is_internal_supplier"],
+                "represents_company": self.additional_data["represents_company"],
+                "tax_id": self.additional_data["tax_id"],
+                "default_currency": self.additional_data["default_currency"],
+                "default_price_list": self.additional_data["default_price_list"],
+                "payment_terms": self.additional_data["payment_terms"]
+            })
+            
+            supplier.insert(ignore_permissions=True)
+            frappe.db.commit()
+            return supplier.name
+            
+        except Exception as e:
+            frappe.db.rollback()
+            self.errors.append(f"Error creating supplier: {str(e)}")
+            return None
+        
 # ---------------------------------------------------------------------------- #
 #                                Data generation                               #
 # ---------------------------------------------------------------------------- #
