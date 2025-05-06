@@ -71,7 +71,6 @@ frappe.pages['data-import-page'].on_page_load = function(wrapper) {
                 });
             }
             
-            console.log("Calling import_data with args:", args);
             frappe.call({
                 method: 'erpnext.data.data_import.import_data',
                 args: args,
@@ -79,7 +78,7 @@ frappe.pages['data-import-page'].on_page_load = function(wrapper) {
                     if (r.exc) {
                         handleError(r, $container);
                     } else {
-                        handleSuccess(r, $container);
+                        handleResponse(r, $container);
                     }
                 }
             });
@@ -100,86 +99,72 @@ frappe.pages['data-import-page'].on_page_load = function(wrapper) {
         });
     }
 
-    // Helper function to handle errors
-    function handleError(r, $container) {
-        let errorMessage = '';
+    // Helper function to handle the API response
+    function handleResponse(r, $container) {
+        const response = r.message || {};
+        
+        // Check if there are any errors in the error_map
+        const hasErrors = response && Object.keys(response).some(key => {
+            return Array.isArray(response[key]) && response[key].length > 0;
+        });
 
-        try {
-            if (r._server_messages) {
-                let messages = typeof r._server_messages === 'string' ?
-                    JSON.parse(r._server_messages) : r._server_messages;
-
-                if (Array.isArray(messages) && messages.length) {
-                    try {
-                        let firstError = typeof messages[0] === 'string' ?
-                            JSON.parse(messages[0]) : messages[0];
-
-                        if (firstError.error_map) {
-                            errorMessage = '<ul>' + formatErrors(firstError.error_map) + '</ul>';
-                        } else {
-                            errorMessage = firstError.message || messages[0];
-                        }
-                    } catch (e) {
-                        // If parsing fails, just join all messages
-                        errorMessage = messages.join('<br>');
-                    }
-                }
-            } else if (r.exc) {
-                errorMessage = r.exc;
-            } else {
-                errorMessage = 'Unknown error occurred';
-            }
-        } catch (e) {
-            errorMessage = 'Error processing response';
-        }
-
-        $container.find('.import-status').html(
-            `<div class="alert alert-danger">
-                Error during import: ${errorMessage}
-            </div>`
-        );
-    }
-
-    // Helper function to handle success
-    function handleSuccess(r, $container) {
-        let error_map = r.message || {};
-
-        if (Object.keys(error_map).length > 0) {
+        if (hasErrors) {
+            // Show errors if present
             $container.find('.import-status').html(
                 `<div class="alert alert-danger">
-                    Error during import
-                    <ul>
-                        ${formatErrors(error_map)}
-                    </ul>
+                    <strong>Import completed with errors:</strong>
+                    <ul>${formatErrors(response)}</ul>
                 </div>`
             );
         } else {
+            // Show success message if no errors
             $container.find('.import-status').html(
                 `<div class="alert alert-success">
-                    Files imported successfully!
+                    <i class="fa fa-check-circle"></i> Import completed successfully!
                 </div>`
             );
         }
+    }
+
+    // Helper function to handle errors
+    function handleError(r, $container) {
+        let errorMessage = 'An error occurred during import';
+        
+        try {
+            if (r._server_messages) {
+                const messages = JSON.parse(r._server_messages);
+                if (messages.length > 0) {
+                    errorMessage = messages.join('<br>');
+                }
+            } else if (r.exc) {
+                errorMessage = r.exc;
+            }
+        } catch (e) {
+            console.error('Error parsing server messages:', e);
+        }
+        
+        $container.find('.import-status').html(
+            `<div class="alert alert-danger">
+                ${errorMessage}
+            </div>`
+        );
     }
 
     // Helper function to format errors
     function formatErrors(error_map) {
         let html = '';
         for (let key in error_map) {
-            // Convert key to a more readable filename format
-            let displayName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            
-            html += `<li><strong>${displayName}:</strong><ul>`;
-            
-            if (Array.isArray(error_map[key])) {
+            if (Array.isArray(error_map[key]) && error_map[key].length > 0) {
+                // Convert key to a more readable format
+                const displayName = key.replace(/_/g, ' ')
+                    .replace(/\b\w/g, l => l.toUpperCase());
+                
+                html += `<li><strong>${displayName}:</strong><ul>`;
                 error_map[key].forEach(err => {
                     html += `<li>${err}</li>`;
                 });
-            } else {
-                html += `<li>${error_map[key]}</li>`;
+                html += `</ul></li>`;
             }
-            
-            html += `</ul></li>`;
         }
         return html;
     }
