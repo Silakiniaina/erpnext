@@ -1,6 +1,6 @@
-from erpnext.data.custom_import.data_import import DataImport
-
+import frappe
 from frappe import _
+from erpnext.data.custom_import.data_import import DataImport
 
 class SupplierImport(DataImport):
     """
@@ -12,26 +12,26 @@ class SupplierImport(DataImport):
         self.country = country
         self.supplier_type = supplier_type
         self.additional_data = {}
+        self.valid_supplier_types = ["Company", "Individual", "Partnership", "Proprietorship"]
 
 # ---------------------------------------------------------------------------- #
 #                                Integrity check                               #
 # ---------------------------------------------------------------------------- #
     def check_type(self):
         """
-        Check if supplier type exists in the system
+        Check if supplier type is in the predefined list of valid types
         """
-        if self.supplier_type :   
-            supplier_type_exists = frappe.db.exists("Supplier Type", self.supplier_type)
-            if not supplier_type_exists:
-                self.errors.append(f"Line {self.line_number}: Supplier Type '{self.supplier_type}' does not exist")
+        if self.supplier_type:
+            if self.supplier_type not in self.valid_supplier_types:
+                self.errors.append(f"Line {self.line_number}: Supplier Type '{self.supplier_type}' is not valid. Valid types are: {', '.join(self.valid_supplier_types)}")
                 self.valid = False
 
     def check_country(self):
         """
         Check if country exists in the system
         """
-        if self.country :
-            country_exists = frappe.db.exists("Country", self.country)
+        if self.country:
+            country_exists = frappe.db.exists("Country", self.country, debug=False)
             if not country_exists:
                 self.errors.append(f"Line {self.line_number}: Country '{self.country}' does not exist")
                 self.valid = False
@@ -40,9 +40,9 @@ class SupplierImport(DataImport):
         """
         Check if supplier exists in the system
         """
-        if self.supplier_name and frappe.db.exists("Supplier", {"supplier_name": self.supplier_name}):
+        if self.supplier_name and frappe.db.exists("Supplier", {"supplier_name": self.supplier_name}, debug=False):
             self.errors.append(f"Line {self.line_number}: Supplier '{self.supplier_name}' already exists")
-            is_valid = False
+            self.valid = False
 
 # ---------------------------------------------------------------------------- #
 #                                   Override                                   #
@@ -87,7 +87,6 @@ class SupplierImport(DataImport):
             })
             
             supplier.insert(ignore_permissions=True)
-            frappe.db.commit()
             return supplier.name
             
         except Exception as e:
@@ -98,6 +97,7 @@ class SupplierImport(DataImport):
     def check_foreign_key(self):
         """Check foreign key references"""
         pass    
+
 # ---------------------------------------------------------------------------- #
 #                                Data generation                               #
 # ---------------------------------------------------------------------------- #
@@ -105,10 +105,8 @@ class SupplierImport(DataImport):
         """
         Generate additional data needed for creating a supplier
         """
-        # Generate a unique supplier ID if needed
         supplier_id = f"SUPP-{frappe.utils.now_datetime().strftime('%Y%m%d')}-{frappe.utils.random_string(5)}"
         
-        # Set default values for other required fields
         self.additional_data = {
             "supplier_group": frappe.db.get_single_value("Buying Settings", "supplier_group") or "All Supplier Groups",
             "supplier_id": supplier_id,
