@@ -33,6 +33,7 @@ class DataImport(ABC):
         """
         if not value or value.strip() == "":
             self.errors.append(f"Line {self.line_number}: {field_name} is required")
+            self.valid = False
             return False
         return True
     
@@ -44,10 +45,12 @@ class DataImport(ABC):
             num_val = float(number)
             if min_value is not None and num_val < min_value:
                 self.errors.append(f"Line {self.line_number}: Value {number} must be at least {min_value}")
+                self.valid = False
                 return False
             return True
         except (ValueError, TypeError):
             self.errors.append(f"Line {self.line_number}: Value '{number}' is not a valid number")
+            self.valid = False
             return False
         
     def validate_date(self, date_str):
@@ -63,9 +66,11 @@ class DataImport(ABC):
                     continue
                     
             self.errors.append(f"Line {self.line_number}: '{date_str}' is not a valid date format")
+            self.valid = False
             return False
         except Exception as e:
             self.errors.append(f"Line {self.line_number}: Error validating date: {str(e)}")
+            self.valid = False
             return False
         
     def validate(self):
