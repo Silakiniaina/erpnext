@@ -94,7 +94,10 @@ class SupplierImport(DataImport):
             frappe.db.rollback()
             self.errors.append(f"Error creating supplier: {str(e)}")
             return None
-        
+
+    def check_foreign_key(self):
+        """Check foreign key references"""
+        pass    
 # ---------------------------------------------------------------------------- #
 #                                Data generation                               #
 # ---------------------------------------------------------------------------- #
