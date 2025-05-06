@@ -20,14 +20,22 @@ class SupplierImport(DataImport):
         Returns:
             bool: True if valid, False otherwise
         """
-        if not self.check_required_value(self.supplier_type, "supplier_name"):
-            self.errors.append(f"Line {self.line_number}: Supplier Type is required")
-            self.valid = False
-            return
-            
-        supplier_type_exists = frappe.db.exists("Supplier Type", self.supplier_type)
-        if not supplier_type_exists:
-            self.errors.append(f"Line {self.line_number}: Supplier Type '{self.supplier_type}' does not exist")
-            self.valid = False
-            pass
-        pass
+        if self.supplier_type :   
+            supplier_type_exists = frappe.db.exists("Supplier Type", self.supplier_type)
+            if not supplier_type_exists:
+                self.errors.append(f"Line {self.line_number}: Supplier Type '{self.supplier_type}' does not exist")
+                self.valid = False
+
+
+    def check_country(self):
+        """
+        Check if country exists in the system
+        
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if self.country :
+            country_exists = frappe.db.exists("Country", self.country)
+            if not country_exists:
+                self.errors.append(f"Line {self.line_number}: Country '{self.country}' does not exist")
+                self.valid = False
