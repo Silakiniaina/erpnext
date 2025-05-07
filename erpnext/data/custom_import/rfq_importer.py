@@ -37,9 +37,9 @@ class RFQImport(BaseImport):
             self.validate_date(self.required_by)
             self.validate_number(self.quantity, min_value=0.1)
             
-            if getdate(self.required_by) < getdate(self.date):
-                self.errors.append(f"Line {self.line_number}: Required by date cannot be before RFQ date")
-                self.valid = False
+            # if getdate(self.required_by) < getdate(self.date):
+            #     self.errors.append(f"Line {self.line_number}: Required by date cannot be before RFQ date")
+            #     self.valid = False
 
         if self.valid:
             self.check_foreign_key()
@@ -88,8 +88,8 @@ class RFQImport(BaseImport):
             return None
 
         try:
-            transaction_date = formatdate(self.date, "yyyy-mm-dd")
-            schedule_date = formatdate(self.required_by, "yyyy-mm-dd")
+            transaction_date = datetime.strptime(self.date, "%d/%m/%Y").date()
+            schedule_date = datetime.strptime(self.required_by, "%d/%m/%Y").date()
 
             # Check if RFQ exists
             rfq = None
@@ -196,8 +196,8 @@ class RFQImport(BaseImport):
         mr = frappe.get_doc({
             "doctype": "Material Request",
             "material_request_type": "Purchase",
-            "transaction_date": formatdate(self.date, "yyyy-mm-dd"),
-            "schedule_date": formatdate(self.required_by, "yyyy-mm-dd"),
+            "transaction_date": datetime.strptime(self.date, "%d/%m/%Y").date(),
+            "schedule_date": datetime.strptime(self.required_by, "%d/%m/%Y").date(),
             "items": [{
                 "item_code": self.item_name,
                 "item_name": self.item_name,
@@ -205,7 +205,7 @@ class RFQImport(BaseImport):
                 "uom": self.uom,
                 "conversion_factor": 1.0,
                 "warehouse": f"{self.target_warehouse} - ITU",
-                "schedule_date": formatdate(self.required_by, "yyyy-mm-dd")
+                "schedule_date": datetime.strptime(self.required_by, "%d/%m/%Y").date()
             }],
             "purpose": self.purpose
         })
